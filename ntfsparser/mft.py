@@ -1,13 +1,20 @@
 # -*- coding: utf-8 -*-
 
+import os
+import stat
 import mmap
 import struct
+from subprocess import Popen
 from record import FileRecord
+
+
+PATH = 'disk2.img'
 
 
 class MFT(object):
     def __init__(self, raw_data, **mft_params):
         self._bin = raw_data
+        self.params = mft_params
         self._get_all_file_records()
 
     def _get_all_file_records(self):
@@ -16,7 +23,7 @@ class MFT(object):
         self.records = []
         i = 0
         j = fr_size
-        while j < len(mft):
+        while j < len(self._bin):
             try:
                 fr = FileRecord(self._bin[i:j], i)
             except AssertionError:
@@ -46,15 +53,34 @@ class MFT(object):
         }
 
 
-with open('disk2.img', 'r+b') as f:
-    mm = mmap.mmap(f.fileno(), 0)
-    p = MFT.extract_mft_params(mm)
-    offset = p['cluster_size'] * p['mft_offset']
-    size = p['cluster_size'] * p['mft_size']
-    mft = mm[offset:offset + size]
-    records = MFT(mft).records
-    for i in range(4):
-        r = records[i]
-        for a in r.attributes:
-            print type(a)
-    mm.close()
+class Disk(object):
+    # TODO: file destructor
+    def __init__(self, path):
+        self.path = path
+        self._mmap()
+        '''
+        stat_info = os.stat(path)
+        if stat.S_ISBLK(stat_info):
+            self._create_tmp_img()
+            self._mmap()
+        elif stat.S_ISREG(stat_info):
+            self._mmap()
+        else:
+            raise Exception('Invalid filetype of input file')
+        '''
+
+    def _mmap(self):
+        self.file_ = open(self.path, 'r+b')
+        self.data = mmap.mmap(self.file_.fileno(), 0)
+
+    def _create_tmp_img(self):
+        self.path2 = self.path
+        self.path = '/tmp/disk.img'
+        with Popen(["dd", "if=" + self.path2, "of=" + self.path]) as pipe:
+            pipe.communicate()
+
+disk = Disk(PATH)
+mp = MFT.extract_mft_params(disk.data)
+i = mp['cluster_size'] * mp['mft_offset']
+j = i + mp['cluster_size'] * mp['mft_size']
+mft = MFT(disk.data[i:j], **mp)

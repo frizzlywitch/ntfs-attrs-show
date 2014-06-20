@@ -133,7 +133,7 @@ class ObjectId(Attribute):
         for i in range(0, len(values) - 1, 2):
             v = (values[i], values[i + 1])
             self.raw_values.append(v)
-            view_v = str(hex(v[0])) + str(hex(v[1]))[2:] # rm '0x'
+            view_v = str(hex(v[0])) + str(hex(v[1]))[2:]  # rm '0x'
             self.view_values.append(view_v)
         self.data_fields = dict(zip(self.ATTR_DATA_KEYS, self.view_values))
 

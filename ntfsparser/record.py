@@ -71,7 +71,7 @@ class FileRecord(object):
             (a_id, a_len) = self.ATTR_INFO(self._bin[i:])
             if a_len == 0 or a_len >= bound:
                 break
-            class_ =  self.ATTRS.get(a_id)
+            class_ = self.ATTRS.get(a_id)
             if class_:
                 fa = class_(self._bin[i:i + a_len], i)
             else:
