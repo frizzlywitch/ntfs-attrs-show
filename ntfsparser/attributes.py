@@ -3,12 +3,13 @@
 import struct
 
 
-class Attribute:
+class Attribute(object):
     """
     Contains fields:
         offset = int() thos offset is relative inside of file-record
         attr_fields = {}
     """
+    # TODO: flags more informative
     ATTR_COMMON_FORMAT = '2I2B3H'
     ATTR_COMMON_SIZE = struct.calcsize(ATTR_COMMON_FORMAT)
     ATTR_COMMON_KEYS = ['type', 'len_with_aheader', 'nonresident',
@@ -40,7 +41,7 @@ class Attribute:
         self.header_fields = dict(zip(self.ATTR_COMMON_KEYS, common_values))
 
     def _parse_uncommon_fields(self):
-        assert self.fields, 'attr fields is empty'
+        assert self.header_fields, 'attr fields is empty'
         (fmt, keys) = self.ATTR_UNCOMMON_INFO[self.is_resident()]
         sz = struct.calcsize(fmt)
         values = struct.unpack(fmt, self._bin[:sz])
@@ -50,8 +51,8 @@ class Attribute:
     def _parse_name(self):
         if not self.is_named():
             return
-        i = self.fields['name_offset']
-        j = i + self.fields['name_len']
+        i = self.header_fields['name_offset']
+        j = i + self.header_fields['name_len']
         self.header_fields['name'] = unicode(self._bin[i:j])
 
     def is_resident(self):
@@ -62,8 +63,8 @@ class Attribute:
 
 
 class StandartInformation(Attribute):
-    ATTR_DATA_FORMAT = '4Q6I2Q'
-    ATTR_DATA_SIZE = struct.calcsize(ATTR_DATA_FORMAT)
+    ATTR_DATA_FORMAT = '4Q4I'
+    ATTR_DATA_EXTEND = '2I2Q'
     ATTR_DATA_KEYS = ['c_time', 'a_time', 'm_time', 'r_time',
             'dos_file_permissions', 'max_num_of_versions',
             'version_num', 'class_id', 'owner_id', 'security_id',
@@ -71,10 +72,16 @@ class StandartInformation(Attribute):
 
     def __init__(self, raw_attr, offset):
         super(StandartInformation, self).__init__(raw_attr, offset)
-        assert self.fields, 'Attr fields is empty'
-        i = self.fields['attr_data_offset']
-        j = i + self.ATTR_DATA_SIZE
-        values = struct.unpack(self.ATTR_DATA_FORMAT, self._bin[i:j])
+        assert self.header_fields, 'Attr fields is empty'
+        fmt = self.ATTR_DATA_FORMAT
+        size = struct.calcsize(fmt)
+        i = self.header_fields['attr_data_offset']
+        j = i + size
+        if j < len(self._bin):
+            fmt += self.ATTR_DATA_EXTEND
+            size = struct.calcsize(fmt)
+            j = i + size
+        values = struct.unpack(fmt, self._bin[i:j])
         self.data_fields = dict(zip(self.ATTR_DATA_KEYS, values))
 
 
@@ -89,8 +96,8 @@ class FileName(Attribute):
 
     def __init__(self, raw_attr, offset):
         super(FileName, self).__init__(raw_attr, offset)
-        assert self.fields, 'Attr fields is empty'
-        i = self.fields['attr_data_offset']
+        assert self.header_fields, 'Attr fields is empty'
+        i = self.header_fields['attr_data_offset']
         j = i + self.ATTR_DATA_SIZE
         values = struct.unpack(self.ATTR_DATA_FORMAT, self._bin[i:j])
         self.data_fields = dict(zip(self.ATTR_DATA_KEYS, values))
@@ -104,32 +111,39 @@ class FileName(Attribute):
 
 
 class ObjectId(Attribute):
-    ATTR_DATA_FORMAT = '8Q'
-    ATTR_DATA_SIZE = struct.calcsize(ATTR_DATA_FORMAT)
+    ATTR_DATA_FORMAT = '2Q'
+    ATTR_DATA_EXTEND = '6Q'
     ATTR_DATA_KEYS = ['guid_obj_id', 'guid_birth_vol_id',
             'guid_birth_obj_id', 'guid_domain_id']
 
     def __init__(self, raw_attr, offset):
         super(ObjectId, self).__init__(raw_attr, offset)
-        assert self.fields, 'Attr fields is empty'
-        i = self.fields['attr_data_offset']
-        j = i + self.ATTR_DATA_SIZE
+        assert self.header_fields, 'Attr fields is empty'
+        fmt = self.ATTR_DATA_FORMAT
+        size = struct.calcsize(fmt)
+        i = self.header_fields['attr_data_offset']
+        j = i + size
+        if j < len(self._bin):
+            fmt += self.ATTR_DATA_EXTEND
+            size = struct.calcsize(fmt)
+            j = i + size
         values = struct.unpack(self.ATTR_DATA_FORMAT, self._bin[i:j])
         self.raw_values = []
         self.view_values = []
         for i in range(0, len(values) - 1, 2):
-            v = values[i] << 64 + values[i + 1]
+            v = (values[i], values[i + 1])
             self.raw_values.append(v)
-            self.view_values.append(hex(v))
+            view_v = str(hex(v[0])) + str(hex(v[1]))[2:] # rm '0x'
+            self.view_values.append(view_v)
         self.data_fields = dict(zip(self.ATTR_DATA_KEYS, self.view_values))
 
 
 class VolumeName(Attribute):
     def __init__(self, raw_attr, offset):
         super(VolumeName, self).__init__(raw_attr, offset)
-        assert self.fields, 'Attr fields is empty'
-        i = self.fields['attr_data_offset']
-        self.data_fields['volume_name'] = unicode(self._bin[i:])
+        assert self.header_fields, 'Attr fields is empty'
+        i = self.header_fields['attr_data_offset']
+        self.data_fields = {'volume_name': unicode(self._bin[i:])}
 
 
 class VolumeInformation(Attribute):
@@ -141,8 +155,8 @@ class VolumeInformation(Attribute):
 
     def __init__(self, raw_attr, offset):
         super(VolumeInformation, self).__init__(raw_attr, offset)
-        assert self.fields, 'Attr fields is empty'
-        i = self.fields['attr_data_offset']
+        assert self.header_fields, 'Attr fields is empty'
+        i = self.header_fields['attr_data_offset']
         j = i + self.ATTR_DATA_SIZE
         values = struct.unpack(self.ATTR_DATA_FORMAT, self._bin[i:j])
         self.data_fields = dict(zip(self.ATTR_DATA_KEYS, values))

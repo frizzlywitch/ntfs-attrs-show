@@ -19,11 +19,19 @@ class FileRecord:
         'flags', 'real_size', 'allocated_size', 'base_ref',
         'next_att_id', 'rec_no',
     ]
-    ATTR_LEN_FORMAT = '4xI'
+    ATTR_LEN_FORMAT = '2I'
     ATTR_LEN_SIZE = struct.calcsize(ATTR_LEN_FORMAT)
-    ATTR_LEN = lambda self, attr: struct.unpack(
+    ATTR_INFO = lambda self, attr: struct.unpack(
         self.ATTR_LEN_FORMAT, attr[:self.ATTR_LEN_SIZE]
-    )[0]
+    )
+
+    ATTRS = {
+        16: StandartInformation,  # 0x10
+        48: FileName,             # 0x30
+        64: ObjectId,             # 0x40
+        96: VolumeName,           # 0x60
+        112: VolumeInformation,   # 0x70
+    }
 
     @staticmethod
     def calc_record_size(mft):
@@ -60,8 +68,12 @@ class FileRecord:
         bound = self.header['real_size']
         while i + a_len < bound:
             i += a_len
-            a_len = self.ATTR_LEN(self._bin[i:])
+            (a_id, a_len) = self.ATTR_INFO(self._bin[i:])
             if a_len == 0 or a_len >= bound:
                 break
-            fa = Attribute(self._bin[i:i + a_len], i)
+            class_ =  self.ATTRS.get(a_id)
+            if class_:
+                fa = class_(self._bin[i:i + a_len], i)
+            else:
+                fa = Attribute(self._bin[i:i + a_len], i)
             self.attributes.append(fa)

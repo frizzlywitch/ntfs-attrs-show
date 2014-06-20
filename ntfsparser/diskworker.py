@@ -45,12 +45,8 @@ with open('disk2.img', 'r+b') as f:
     size = p[0] * p[2]
     mft = mm[offset:offset + size]
     records = get_all_file_records(mft)
-    attrs_types = set()
-    for r in records:
-        for attr in r.attributes:
-            attrs_types.add(attr.fields['type'])
-    attrs_types = list(attrs_types)
-    attrs_types.sort()
-    for t in attrs_types:
-        print t, hex(t)
+    for i in range(4):
+        r = records[i]
+        for a in r.attributes:
+            print type(a)
     mm.close()
