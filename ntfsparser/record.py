@@ -4,7 +4,7 @@ import struct
 from attributes import *
 
 
-class FileRecord:
+class FileRecord(object):
     """
     Contains fields:
         offset = int() - this offset is relative inside of mft
