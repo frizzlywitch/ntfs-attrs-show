@@ -78,9 +78,3 @@ class Disk(object):
         self.path = '/tmp/disk.img'
         with Popen(["dd", "if=" + self.path2, "of=" + self.path]) as pipe:
             pipe.communicate()
-
-disk = Disk(PATH)
-mp = MFT.extract_mft_params(disk.data)
-i = mp['cluster_size'] * mp['mft_offset']
-j = i + mp['cluster_size'] * mp['mft_size']
-mft = MFT(disk.data[i:j], **mp)
