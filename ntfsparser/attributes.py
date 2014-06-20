@@ -1,13 +1,9 @@
 # -*- coding: utf-8 -*-
 
 import struct
-import mmap
-from pprint import pprint
-
-DEBUG = False
 
 
-class FileAttribute:
+class Attribute:
     """
     Contains fields:
         offset = int() thos offset is relative inside of file-record
@@ -17,7 +13,7 @@ class FileAttribute:
     ATTR_COMMON_SIZE = struct.calcsize(ATTR_COMMON_FORMAT)
     ATTR_COMMON_KEYS = ['type', 'len_with_aheader', 'nonresident',
         'name_len', 'name_offset', 'flags', 'attr_id']
-    ATTRS_HEADERS = {
+    ATTR_UNCOMMON_INFO = {
             # keys:
             # [0] - True if resident, False - nonresident
             # values:
@@ -27,25 +23,6 @@ class FileAttribute:
             False: ('16x2Q2HI3Q', ['starting_VCN', 'last_VCN', 'data_runs_offset',
                 'compr_unit_size', 'padding', 'alloc_attr_size', 'real_attr_size', 'size_of_stream']),
     }
-    ATTRS_BODIES_FORMATS = {
-        16: ('4Q6I2Q', ['c_time', 'a_time', 'm_time', 'r_time',
-            'dos_file_permissions', 'max_nums_of_versions', 'version_number',
-            'class_id', 'owner_id', 'security_id', 'quota_charged', 'upd_seq_num']),  # 0x10
-        48: ('7Q2I2B', ['ref_to_parent_dir', 'c_time', 'a_time', 'm_time', 'r_time',
-            'alloc_size_of_file', 'real_size_of_file', 'file_flags', 'reparse',
-            'name_len_in_chars', 'name_len_namespace'],
-            FileAttribute._handle_file_name),  # 0x30
-        64: ('8Q', None, FileAttribute._handle_obj_ids),  # 0x40
-        80: (),  # TODO: 0x50
-        96: (None, None, FileAttribute._get_volume_name),  # 0x60
-        112: ('8x2BH', ['major_version', 'minor_version', 'volume_flags'],
-            FileAttribute._extract_volume_flags),  # 0x70
-        128: (None, None, FileAttribute._extract_data),  # 0x80
-        144: '',  # 0x90
-        160: '',  # 0xA0
-        176: '',  # 0xB0
-        256: '',  # 0x100
-    }
 
     def __init__(self, raw_attr, offset):
         self._bin = raw_attr
@@ -53,7 +30,6 @@ class FileAttribute:
         self._parse_common_fields()
         self._parse_uncommon_fields()
         self._parse_name()
-        self._parse_body()
 
     def _parse_common_fields(self):
         assert self.ATTR_COMMON_SIZE == 16
@@ -61,33 +37,112 @@ class FileAttribute:
         common_values = struct.unpack(
             self.ATTR_COMMON_FORMAT, self._bin[:self.ATTR_COMMON_SIZE]
         )
-        self.fields = dict(zip(self.ATTR_COMMON_KEYS, common_values))
-        if DEBUG:
-            pprint(self.attr_fields)
+        self.header_fields = dict(zip(self.ATTR_COMMON_KEYS, common_values))
 
     def _parse_uncommon_fields(self):
         assert self.fields, 'attr fields is empty'
-        (fmt, keys) = self.ATTRS_HEADERS[self.is_resident()]
+        (fmt, keys) = self.ATTR_UNCOMMON_INFO[self.is_resident()]
         sz = struct.calcsize(fmt)
         values = struct.unpack(fmt, self._bin[:sz])
         fields_upd = dict(zip(keys, values))
-        self.fields.update(fields_upd)
+        self.header_fields.update(fields_upd)
 
     def _parse_name(self):
         if not self.is_named():
             return
         i = self.fields['name_offset']
         j = i + self.fields['name_len']
-        self.fields['name'] = unicode(self._bin[i:j])
-
-    def _parse_body(self):
-        pass
-
-    def _handle_file_name(self):
-        pass
+        self.header_fields['name'] = unicode(self._bin[i:j])
 
     def is_resident(self):
-        return self.fields['nonresident'] == 0
+        return self.header_fields['nonresident'] == 0
 
     def is_named(self):
-        return self.fields['name_len'] != 0
+        return self.header_fields['name_len'] != 0
+
+
+class StandartInformation(Attribute):
+    ATTR_DATA_FORMAT = '4Q6I2Q'
+    ATTR_DATA_SIZE = struct.calcsize(ATTR_DATA_FORMAT)
+    ATTR_DATA_KEYS = ['c_time', 'a_time', 'm_time', 'r_time',
+            'dos_file_permissions', 'max_num_of_versions',
+            'version_num', 'class_id', 'owner_id', 'security_id',
+            'quota_charged', 'upd_seq_num']
+
+    def __init__(self, raw_attr, offset):
+        super(StandartInformation, self).__init__(raw_attr, offset)
+        assert self.fields, 'Attr fields is empty'
+        i = self.fields['attr_data_offset']
+        j = i + self.ATTR_DATA_SIZE
+        values = struct.unpack(self.ATTR_DATA_FORMAT, self._bin[i:j])
+        self.data_fields = dict(zip(self.ATTR_DATA_KEYS, values))
+
+
+class FileName(Attribute):
+    # TODO: flags field in filename attribute is interesting
+    # make it more detailed
+    ATTR_DATA_FORMAT = '7Q2I2B'
+    ATTR_DATA_SIZE = struct.calcsize(ATTR_DATA_FORMAT)
+    ATTR_DATA_KEYS = ['c_time', 'a_time', 'm_time', 'r_time',
+            'allocated_size_of_file', 'real_size_of_file', 'flags',
+            'reparse', 'filename_len_in_chars', 'filename_namespace']
+
+    def __init__(self, raw_attr, offset):
+        super(FileName, self).__init__(raw_attr, offset)
+        assert self.fields, 'Attr fields is empty'
+        i = self.fields['attr_data_offset']
+        j = i + self.ATTR_DATA_SIZE
+        values = struct.unpack(self.ATTR_DATA_FORMAT, self._bin[i:j])
+        self.data_fields = dict(zip(self.ATTR_DATA_KEYS, values))
+
+        self._extract_filename()
+
+    def _extract_filename(self):
+        i = 66
+        j = self.data_fields['filename_len_in_chars'] * 2
+        self.data_fields['filename'] = unicode(self._bin[i:j])
+
+
+class ObjectId(Attribute):
+    ATTR_DATA_FORMAT = '8Q'
+    ATTR_DATA_SIZE = struct.calcsize(ATTR_DATA_FORMAT)
+    ATTR_DATA_KEYS = ['guid_obj_id', 'guid_birth_vol_id',
+            'guid_birth_obj_id', 'guid_domain_id']
+
+    def __init__(self, raw_attr, offset):
+        super(ObjectId, self).__init__(raw_attr, offset)
+        assert self.fields, 'Attr fields is empty'
+        i = self.fields['attr_data_offset']
+        j = i + self.ATTR_DATA_SIZE
+        values = struct.unpack(self.ATTR_DATA_FORMAT, self._bin[i:j])
+        self.raw_values = []
+        self.view_values = []
+        for i in range(0, len(values) - 1, 2):
+            v = values[i] << 64 + values[i + 1]
+            self.raw_values.append(v)
+            self.view_values.append(hex(v))
+        self.data_fields = dict(zip(self.ATTR_DATA_KEYS, self.view_values))
+
+
+class VolumeName(Attribute):
+    def __init__(self, raw_attr, offset):
+        super(VolumeName, self).__init__(raw_attr, offset)
+        assert self.fields, 'Attr fields is empty'
+        i = self.fields['attr_data_offset']
+        self.data_fields['volume_name'] = unicode(self._bin[i:])
+
+
+class VolumeInformation(Attribute):
+    # TODO: detailed flags
+    ATTR_DATA_FORMAT = '8x2BH'
+    ATTR_DATA_SIZE = struct.calcsize(ATTR_DATA_FORMAT)
+    ATTR_DATA_KEYS = ['major_version_number', 'minor_version_number',
+            'flags']
+
+    def __init__(self, raw_attr, offset):
+        super(VolumeInformation, self).__init__(raw_attr, offset)
+        assert self.fields, 'Attr fields is empty'
+        i = self.fields['attr_data_offset']
+        j = i + self.ATTR_DATA_SIZE
+        values = struct.unpack(self.ATTR_DATA_FORMAT, self._bin[i:j])
+        self.data_fields = dict(zip(self.ATTR_DATA_KEYS, values))

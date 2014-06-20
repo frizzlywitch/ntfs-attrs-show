@@ -52,5 +52,5 @@ with open('disk2.img', 'r+b') as f:
     attrs_types = list(attrs_types)
     attrs_types.sort()
     for t in attrs_types:
-        print t
+        print t, hex(t)
     mm.close()

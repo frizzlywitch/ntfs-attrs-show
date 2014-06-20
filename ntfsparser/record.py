@@ -63,5 +63,5 @@ class FileRecord:
             a_len = self.ATTR_LEN(self._bin[i:])
             if a_len == 0 or a_len >= bound:
                 break
-            fa = FileAttribute(self._bin[i:i + a_len], i)
+            fa = Attribute(self._bin[i:i + a_len], i)
             self.attributes.append(fa)
