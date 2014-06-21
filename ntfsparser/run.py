@@ -16,6 +16,7 @@ mft = MFT(disk.data[i:j], **mp)
 
 records = mft.records
 print len(records)
+print len(filter(lambda r: r.is_active(), records))
 r = records[0]
 for a in r.attributes:
     print type(a)

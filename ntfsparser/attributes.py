@@ -160,3 +160,40 @@ class VolumeInformation(Attribute):
         j = i + self.ATTR_DATA_SIZE
         values = struct.unpack(self.ATTR_DATA_FORMAT, self._bin[i:j])
         self.data_fields = dict(zip(self.ATTR_DATA_KEYS, values))
+
+
+class Data(Attribute):
+    def __init__(self, raw_attr, offset):
+        super(Data, self).__init__(raw_attr, offset)
+        assert self.header_fields, 'Attr fields is empty'
+        if self.is_resident():
+            i = self.header_fields['attr_data_offset']
+        else:
+            i = self.header_fields['data_runs_offset']
+        j = self.header_fields['len_with_aheader']
+        self.data_fields = {'data': self._bin[i:j]}
+
+
+class IndexRoot(Attribute):
+    ATTR_DATA_FORMAT = '3IB'
+    ATTR_DATA_SIZE = struct.calcsize(ATTR_DATA_FORMAT)
+    ATTR_DATA_KEYS = ['attr_type', 'collation_rule',
+            'size_of_index_alloc_entry', 'clusters_per_index_record']
+
+    def __init__(self, raw_attr, offset):
+        super(IndexRoot, self).__init__(raw_attr, offset)
+        i = self.header_fields['attr_data_offset']
+        j = i + self.ATTR_DATA_SIZE
+        values = struct.unpack(self.ATTR_DATA_FORMAT, self._bin[i:j])
+        self.data_fields = dict(zip(self.ATTR_DATA_KEYS, values))
+
+
+class Bitmap(Attribute):
+    def __init__(self, raw_attr, offset):
+        super(Bitmap, self).__init__(raw_attr, offset)
+        if self.is_resident():
+            i = self.header_fields['attr_data_offset']
+        else:
+            i = self.header_fields['data_runs_offset']
+        j = self.header_fields['len_with_aheader']
+        self.data_fields = {'bit_field': self._bin[i:j]}

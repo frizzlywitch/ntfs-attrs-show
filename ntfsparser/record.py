@@ -31,6 +31,9 @@ class FileRecord(object):
         64: ObjectId,             # 0x40
         96: VolumeName,           # 0x60
         112: VolumeInformation,   # 0x70
+        128: Data,                # 0x80
+        144: IndexRoot,           # 0x90
+        176: Bitmap,              # 0xB0
     }
 
     @staticmethod
@@ -77,3 +80,7 @@ class FileRecord(object):
             else:
                 fa = Attribute(self._bin[i:i + a_len], i)
             self.attributes.append(fa)
+
+    def is_active(self):
+        flags = self.header['flags']
+        return flags == 1 or flags == 2
